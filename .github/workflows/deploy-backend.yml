@@ -23,7 +23,6 @@ jobs:
   deploy:
     name: Build Docker image & Deploy to ECS Fargate
     runs-on: ubuntu-latest
-    environment: production
 
     permissions:
       contents: read

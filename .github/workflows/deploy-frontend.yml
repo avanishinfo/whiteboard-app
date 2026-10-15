@@ -23,7 +23,6 @@ jobs:
   deploy:
     name: Build & Deploy to S3 + CloudFront
     runs-on: ubuntu-latest
-    environment: production
 
     permissions:
       contents: read
