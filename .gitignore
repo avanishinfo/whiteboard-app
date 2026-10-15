@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+frontend/dist/
+infra/cdk.out/
+
+# Environment files (contain secrets)
+frontend/.env
+backend/.env
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# CDK
+infra/cdk.out/
+cdk.context.json

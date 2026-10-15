@@ -1,0 +1,117 @@
+name: Deploy Infrastructure (CDK)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-infra.yml'
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: 'Which stack to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options: [all, WhiteboardBackend, WhiteboardFrontend]
+
+concurrency:
+  group: deploy-infra
+  cancel-in-progress: false
+
+jobs:
+  diff:
+    name: CDK Diff
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        run: npm ci
+        working-directory: infra
+
+      - name: CDK Diff
+        id: diff
+        run: |
+          STACK="${{ github.event.inputs.stack || 'all' }}"
+          if [[ "$STACK" == "all" ]]; then
+            npx cdk diff --no-color 2>&1 | tee /tmp/cdk-diff.txt
+          else
+            npx cdk diff "$STACK" --no-color 2>&1 | tee /tmp/cdk-diff.txt
+          fi
+        working-directory: infra
+
+      - name: Post diff to step summary
+        run: |
+          echo '### CDK Diff' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/cdk-diff.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: CDK Deploy
+    runs-on: ubuntu-latest
+    needs: diff
+    environment: production
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install CDK dependencies
+        run: npm ci
+        working-directory: infra
+
+      - name: CDK Deploy
+        run: |
+          STACK="${{ github.event.inputs.stack || 'all' }}"
+          if [[ "$STACK" == "all" ]]; then
+            npx cdk deploy --all --require-approval never --outputs-file /tmp/cdk-outputs.json
+          else
+            npx cdk deploy "$STACK" --require-approval never --outputs-file /tmp/cdk-outputs.json
+          fi
+        working-directory: infra
+
+      - name: Post outputs to step summary
+        run: |
+          echo '### CDK Outputs' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/cdk-outputs.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
